@@ -169,7 +169,7 @@ if __name__ == '__main__':
     while True:
         accel = getAccelData()
         if accel:
-            print(f"Accelerometer X: {accel['acc_x']}, Y: {accel['acc_y']}, Z: {accel['acc_z']}")
+            print("Accelerometer X: {}, Y: {}, Z: {}".format(accel['acc_x'], accel['acc_y'], accel['acc_z']))
         time.sleep(2)
 
     # jump()
