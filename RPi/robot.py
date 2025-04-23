@@ -124,13 +124,47 @@ def buzzerCtrl(buzzerCtrl, cmdInput):
 	dataCMD = json.dumps({'var':"buzzer", 'val':buzzerCtrl})
 	ser.write(dataCMD.encode())
 
+def getAccelData():
+    """
+    Request accelerometer data from the robot and return parsed values
+    Returns a dictionary with acc_x, acc_y, acc_z values
+    """
+    # Clear any existing data in the buffer
+    ser.reset_input_buffer()
+    
+    # Send request command for accelerometer data
+    ser.write("GET_ACCEL\n".encode())
+    
+    # Wait for response
+    time.sleep(0.1)
+    
+    # Read response
+    if ser.in_waiting:
+        response = ser.readline().decode('utf-8').strip()
+        try:
+            # Parse JSON response
+            accel_data = json.loads(response)
+            return accel_data
+        except json.JSONDecodeError:
+            print("Error parsing accelerometer data")
+            return None
+    else:
+        print("No response received from robot")
+        return None
 
 
 if __name__ == '__main__':
-    # robotCtrl.moveStart(100, 'forward', 'no', 0)
-    # time.sleep(3)
-    # robotCtrl.moveStop()
-    jump()
-	# while 1:
+    # Example of how to get accelerometer data
+	while(True):
+		accel = getAccelData()
+		if accel:
+			print(f"Accelerometer X: {accel['acc_x']}, Y: {accel['acc_y']}, Z: {accel['acc_z']}")
+		time.sleep(2)
+    
+    # jump()
+    # while 1:
     #     time.sleep(1)
     #     pass
+
+
+
