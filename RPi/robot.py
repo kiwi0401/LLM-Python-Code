@@ -235,88 +235,117 @@ def run_bot():
                 # 3. Add user command to message history
                 messages.append({"role": "user", "content": command_text})
                 
-                # 4. Make the tool calling request to OpenAI
+                # 4. Make the tool calling request to OpenAI and process all tool calls
                 try:
-                    completion = openai_client.chat.completions.create(
-                        model="gpt-4o",
-                        messages=messages,
-                        tools=tools
-                    )
+                    # Initialize a flag to track if we need to continue tool processing
+                    has_pending_tools = True
+                    tool_iteration = 0
+                    max_tool_iterations = 5  # Prevent infinite loops
                     
-                    # Process and display the response
-                    message = completion.choices[0].message
-                    print("\nLLM Response:")
-                    print(message.content)
-                    
-                    # Add assistant's response to the message history
-                    messages.append({
-                        "role": "assistant",
-                        "content": message.content,
-                        **({"tool_calls": message.tool_calls} if message.tool_calls else {})
-                    })
-                    
-                    # Speak the response
-                    tts_engine.say(message.content)
-                    tts_engine.runAndWait()
-                    
-                    # Check if there are tool calls
-                    if message.tool_calls:
-                        print("\nTool Calls Received:")
-                        for tool_call in message.tool_calls:
-                            print(f"Tool ID: {tool_call.id}")
-                            print(f"Function: {tool_call.function.name}")
-                            print(f"Arguments: {tool_call.function.arguments}")
+                    # Process tool calls until complete or max iterations reached
+                    while has_pending_tools and tool_iteration < max_tool_iterations:
+                        tool_iteration += 1
+                        
+                        print(f"\nProcessing tool iteration {tool_iteration}/{max_tool_iterations}...")
+                        
+                        # Make the tool calling request to OpenAI
+                        completion = openai_client.chat.completions.create(
+                            model="gpt-4o",
+                            messages=messages,
+                            tools=tools
+                        )
+                        
+                        # Process and display the response
+                        message = completion.choices[0].message
+                        print("\nLLM Response:")
+                        print(message.content)
+                        
+                        # Add assistant's response to the message history
+                        messages.append({
+                            "role": "assistant",
+                            "content": message.content,
+                            **({"tool_calls": message.tool_calls} if message.tool_calls else {})
+                        })
+                        
+                        # Only speak the response on the first iteration
+                        if tool_iteration == 1:
+                            tts_engine.say(message.content)
+                            tts_engine.runAndWait()
+                        
+                        # Check if there are tool calls
+                        if message.tool_calls:
+                            print(f"\nTool Calls Received (Iteration {tool_iteration}):")
+                            has_pending_tools = True
                             
-                            # Execute the tool call
-                            try:
-                                name = tool_call.function.name
-                                args = json.loads(tool_call.function.arguments) if tool_call.function.arguments.strip() else {}
+                            for tool_call in message.tool_calls:
+                                print(f"Tool ID: {tool_call.id}")
+                                print(f"Function: {tool_call.function.name}")
+                                print(f"Arguments: {tool_call.function.arguments}")
                                 
-                                # Call the function and get the result
-                                result = call_function(name, args)
-                                
-                                # Add the result to the message history
-                                messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": str(result)
-                                })
-                                
-                                print(f"Tool result: {result}")
-                                
-                                # Speak a brief confirmation of tool execution
-                                if isinstance(result, str) and len(result) < 100:
-                                    tts_engine.say(f"Task complete: {result}")
-                                else:
-                                    tts_engine.say("Task complete")
-                                tts_engine.runAndWait()
-                                
-                            except Exception as e:
-                                error_msg = f"Error processing tool call: {str(e)}"
-                                logger.error(error_msg, exc_info=True)
-                                messages.append({
-                                    "role": "tool",
-                                    "tool_call_id": tool_call.id,
-                                    "content": f"Error: {error_msg}"
-                                })
-                                tts_engine.say("Error executing command")
-                                tts_engine.runAndWait()
+                                # Execute the tool call
+                                try:
+                                    name = tool_call.function.name
+                                    args = json.loads(tool_call.function.arguments) if tool_call.function.arguments.strip() else {}
+                                    
+                                    # Call the function and get the result
+                                    result = call_function(name, args)
+                                    
+                                    # Add the result to the message history
+                                    messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "content": str(result)
+                                    })
+                                    
+                                    print(f"Tool result: {result}")
+                                    
+                                    # Only provide audio feedback for the final result or first iteration
+                                    if (tool_iteration == 1 or not has_pending_tools) and isinstance(result, str) and len(result) < 100:
+                                        tts_engine.say(f"Task complete: {result}")
+                                        tts_engine.runAndWait()
+                                    
+                                except Exception as e:
+                                    error_msg = f"Error processing tool call: {str(e)}"
+                                    logger.error(error_msg, exc_info=True)
+                                    messages.append({
+                                        "role": "tool",
+                                        "tool_call_id": tool_call.id,
+                                        "content": f"Error: {error_msg}"
+                                    })
+                                    tts_engine.say("Error executing command")
+                                    tts_engine.runAndWait()
+                        else:
+                            # No more tool calls, we're done with this cycle
+                            print("\nNo more tool calls for this command.")
+                            has_pending_tools = False
+                            break
                     
+                    # Provide feedback if we hit the iteration limit
+                    if tool_iteration >= max_tool_iterations and has_pending_tools:
+                        print(f"\nReached maximum tool iterations ({max_tool_iterations}), stopping.")
+                        tts_engine.say("Action sequence too long. Some steps may not have completed.")
+                        tts_engine.runAndWait()
+                        
+                    # Final confirmation once all tool chains are complete
+                    if tool_iteration > 1:  # Only if we ran multiple tool iterations
+                        tts_engine.say("All actions completed")
+                        tts_engine.runAndWait()
+                        
                 except Exception as e:
                     logger.error(f"Error in LLM tool calling: {e}", exc_info=True)
                     print(f"❌ Error in LLM tool calling: {e}")
                     tts_engine.say("I encountered an error processing your request")
                     tts_engine.runAndWait()
-                
-                # Reset for next command
-                try:
-                    lightCtrl("off", 0)  # Turn off the blue light
-                except:
-                    pass
                     
                 # Flush the audio queue and reset the recognizer for the next command
                 robot_audio.flush_audio_queue(audio_queue)
                 recognizer.Reset()
+                
+                # Add clear feedback that we're ready for the next command
+                print("\n-----------------------------------------")
+                print("✓ Command cycle complete. Listening for wake word again...")
+                tts_engine.say("Ready for next command")
+                tts_engine.runAndWait()
                 
                 # Periodically trim conversation history to prevent it from getting too long
                 if len(messages) > 10:  # Keep system message plus last 9 exchanges

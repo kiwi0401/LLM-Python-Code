@@ -25,7 +25,7 @@
         "parameters": {
           "type": "object",
           "properties": {
-            "distance": {
+            "distance_cm": {
               "type": "number",
               "description": "The distance to move in centimeters. Positive values move forward, negative values move backward. Recommended range is between -100 and 100 cm for accurate movement."
             }
