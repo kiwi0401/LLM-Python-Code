@@ -1,39 +1,48 @@
 {
   "tools": [
     {
-      "name": "rotate_to_angle",
-      "description": "Rotates the robot to a specific angle using gyroscope feedback for precision.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "target_angle": {
-            "type": "number",
-            "description": "The target angle in degrees. Positive values rotate clockwise, negative values rotate counter-clockwise. Use values between -180 and 180 degrees for best results."
-          }
-        },
-        "required": ["target_angle"]
+      "type": "function",
+      "function": {
+        "name": "rotate_to_angle",
+        "description": "Rotates the robot to a specific angle using gyroscope feedback for precision.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "target_angle": {
+              "type": "number",
+              "description": "The target angle in degrees. Positive values rotate clockwise, negative values rotate counter-clockwise. Use values between -180 and 180 degrees for best results."
+            }
+          },
+          "required": ["target_angle"]
+        }
       }
     },
     {
-      "name": "move_distance",
-      "description": "Moves the robot forward or backward by a specific distance.",
-      "parameters": {
-        "type": "object",
-        "properties": {
-          "distance": {
-            "type": "number",
-            "description": "The distance to move in centimeters. Positive values move forward, negative values move backward. Recommended range is between -100 and 100 cm for accurate movement."
-          }
-        },
-        "required": ["distance"]
+      "type": "function",
+      "function": {
+        "name": "move_distance",
+        "description": "Moves the robot forward or backward by a specific distance.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "distance": {
+              "type": "number",
+              "description": "The distance to move in centimeters. Positive values move forward, negative values move backward. Recommended range is between -100 and 100 cm for accurate movement."
+            }
+          },
+          "required": ["distance"]
+        }
       }
     },
     {
-      "name": "view_surroundings",
-      "description": "Takes a picture with the robot's camera and analyzes what's visible in the environment.",
-      "parameters": {
-        "type": "object",
-        "properties": {}
+      "type": "function",
+      "function": {
+        "name": "view_surroundings",
+        "description": "Takes a picture with the robot's camera and analyzes what's visible in the environment.",
+        "parameters": {
+          "type": "object",
+          "properties": {}
+        }
       }
     }
   ]

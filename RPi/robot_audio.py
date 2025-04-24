@@ -1,3 +1,7 @@
+#!/usr/bin/env/python3
+# File name   : robot_audio.py
+# Description : Audio processing tools for voice commands
+
 import os
 import queue
 import threading
@@ -12,31 +16,32 @@ from functools import partial
 
 # Global Configuration
 WAKE_WORD = "hello robot"  # wake word (in lower-case for matching)
-SAMPLE_RATE = 16000          # <-- use 48 kHz
+SAMPLE_RATE = 16000         # audio sample rate
 CHUNK = 4096
 MODEL_PATH = "./vosk-model-small-en-us-0.15"  # path to Vosk model directory
-
+PROMPT_PATHS = ["dog_response.md", "dog_actions.md"]
 
 def init_openai_client():
-    load_dotenv("./.env")
+    """Initialize the OpenAI client using API key from environment variables"""
+    load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     return OpenAI(api_key=api_key)
 
-
 def init_vosk_recognizer():
+    """Initialize the Vosk speech recognition model"""
     model = Model(MODEL_PATH)
     recognizer = KaldiRecognizer(model, SAMPLE_RATE)
     return recognizer
 
-
 def init_tts_engine():
+    """Initialize text-to-speech engine"""
     engine = pyttsx3.init()
-    engine.setProperty('rate', 180)  # adjust speech rate if desired
+    engine.setProperty('rate', 180)  # adjust speech rate
     engine.setProperty('volume', 1.0)  # volume: 0.0 to 1.0
     return engine
 
-
 def init_audio_stream():
+    """Initialize audio input stream, preferring ReSpeaker if available"""
     p = pyaudio.PyAudio()
     
     # Find the ReSpeaker device
@@ -101,7 +106,6 @@ def audio_callback(in_data, frame_count, time_info, status, multi_channel, chann
     audio_queue.put(in_data)
     return (None, pyaudio.paContinue)
 
-
 def wait_for_wake_word(recognizer, audio_queue):
     """Listen until the wake word is detected."""
     print("Listening for wake word...")
@@ -125,11 +129,11 @@ def wait_for_wake_word(recognizer, audio_queue):
                 break
     return True
 
-
-def listen_for_command(recognizer, audio_queue, tts_engine):
+def listen_for_command(recognizer, audio_queue, tts_engine=None):
     """After wake word detection, capture the spoken command."""
-    tts_engine.say("Waiting for command")
-    tts_engine.runAndWait()
+    if tts_engine:
+        tts_engine.say("Waiting for command")
+        tts_engine.runAndWait()
     recognizer.Reset()  # Start fresh for command capture
     command_text = ""
     silence_duration = 0
@@ -158,55 +162,50 @@ def listen_for_command(recognizer, audio_queue, tts_engine):
             _ = eval(recognizer.PartialResult()).get("partial", "")
     return command_text.strip()
 
-
+# Global conversation history
 conversation_history = []
+
 def process_command(command_text, openai_client, prompt_path="dog_response.md", memory_limit=10):
-    """Send the command to the OpenAI API and retrieve the response using conversation history.
-
-    Parameters:
-        command_text (str): The user's command text.
-        openai_client: An initialized OpenAI client.
-        prompt_path (str): File path to the system prompt.
-        memory_limit (int): Maximum number of messages to retain (including system prompt).
-
-    Returns:
-        tuple: (assistant_reply, updated conversation_history)
-    """
+    """Process a command with OpenAI API using conversation history."""
+    global conversation_history
+    
     try:
-        # Initialize conversation history with system prompt if empty.
+        # Initialize conversation history with system prompt if empty
         if not conversation_history:
             with open(prompt_path, "r", encoding="utf-8") as f:
                 system_prompt = f.read()
             conversation_history.append({"role": "system", "content": system_prompt})
 
-        # Append the new user message.
+        # Append the new user message
         conversation_history.append({"role": "user", "content": command_text})
 
-        # Call the OpenAI API using the full conversation history.
+        # Call the OpenAI API using the full conversation history
         response = openai_client.chat.completions.create(
-            model="gpt-4o",  # or "gpt-4" if available
+            model="gpt-4o",
             messages=conversation_history,
         )
         assistant_reply = response.choices[0].message.content
 
-        # Append the assistant's reply to the conversation history.
+        # Append the assistant's reply to the conversation history
         conversation_history.append({"role": "assistant", "content": assistant_reply})
 
-        # Limit conversation history to the last 'memory_limit' messages.
-        # Always keep the initial system prompt at index 0.
+        # Limit conversation history to the last 'memory_limit' messages
         if len(conversation_history) > memory_limit:
-            # Preserve system prompt and the last (memory_limit - 1) messages.
+            # Preserve system prompt and the last (memory_limit - 1) messages
             conversation_history[:] = [conversation_history[0]] + conversation_history[-(memory_limit - 1):]
 
         return prompt_path, assistant_reply
     except Exception as e:
         print(f"Error processing command: {e}")
-        return "I'm sorry, I couldn't process that request."
+        return prompt_path, "I'm sorry, I couldn't process that request."
 
-
-import threading
-from concurrent.futures import ThreadPoolExecutor
-def process_command_threaded(command_text, openai_client, prompt_paths, memory_limit=10):
+def process_command_threaded(command_text, openai_client, prompt_paths=None, memory_limit=10):
+    """Process a command using multiple prompt templates in parallel."""
+    if prompt_paths is None:
+        prompt_paths = PROMPT_PATHS
+        
+    from concurrent.futures import ThreadPoolExecutor
+    
     def process_single_prompt(prompt_path):
         if prompt_path == "dog_response.md":
             return process_command(command_text, openai_client, prompt_path, memory_limit)
@@ -236,8 +235,6 @@ def process_command_threaded(command_text, openai_client, prompt_paths, memory_l
 
     return results
 
-
-
 def flush_audio_queue(audio_queue):
     """Flush any lingering audio in the queue."""
     while not audio_queue.empty():
@@ -246,77 +243,64 @@ def flush_audio_queue(audio_queue):
         except queue.Empty:
             break
 
-
-def main():
-    # Initialize components
-    openai_client = init_openai_client()
-    tts_engine = init_tts_engine()
-    
-    try:
-        p, stream, device_index, channels, multi_channel, recognizer = init_audio_stream()
-    except Exception as e:
-        print(f"Fatal error initializing audio: {e}")
-        return
-
-    # Prepare audio queue and control event
-    audio_queue = queue.Queue()
-    stop_event = threading.Event()  # Using a queue.Event() instead of threading.Event() for clarity
-
-    # Stop the initial blocking stream to re-open in callback mode
-    stream.stop_stream()
-    stream.close()
-
-    # Create the callback using partial to include extra parameters
-    callback = partial(audio_callback,
-                       multi_channel=multi_channel,
-                       channels=channels,
-                       stop_event=stop_event,
-                       audio_queue=audio_queue)
-
-    stream = p.open(format=pyaudio.paInt16,
-                    channels=channels,
-                    rate=SAMPLE_RATE,
-                    input=True,
-                    frames_per_buffer=CHUNK,
-                    input_device_index=device_index,
-                    stream_callback=callback)
-
-    print("Voice assistant is now listening for the wake phrase...")
-
-    try:
-        while True:
-            # 1. Wait for the wake word.
-            wait_for_wake_word(recognizer, audio_queue)
-            print("Wake word detected. Awaiting command...")
-
-            # 2. Listen for and transcribe the command.
-            command_text = listen_for_command(recognizer, audio_queue, tts_engine)
-            if not command_text:
-                print("No command heard within the time limit. Returning to wake word listening.")
-                continue
-            print(f"Transcribed command: '{command_text}'")
-
-            # 3. Process the command via OpenAI.
-            assistant_reply = process_command_threaded(command_text, openai_client, ["dog_response.md", "dog_actions.md"])
-            print(f"Assistant response: {assistant_reply}")
-
-            for prompt_path, reply in assistant_reply:
-                if prompt_path != "dog_response.md":
-                    continue
-                tts_engine.say(reply)
-                tts_engine.runAndWait()
-
-            print("Listening for the wake phrase again...")
-            flush_audio_queue(audio_queue)
-            recognizer.Reset()
-    except KeyboardInterrupt:
-        print("Exiting voice assistant.")
-    finally:
+def cleanup_audio(stream, p, tts_engine=None):
+    """Clean up audio resources."""
+    if stream:
         stream.stop_stream()
         stream.close()
+    if p:
         p.terminate()
+    if tts_engine:
         tts_engine.stop()
 
+def setup_audio_processing():
+    """Setup all audio components and return them as a dictionary."""
+    try:
+        # Initialize components
+        openai_client = init_openai_client()
+        tts_engine = init_tts_engine()
+        p, stream, device_index, channels, multi_channel, recognizer = init_audio_stream()
+        
+        # Prepare audio queue and control event
+        audio_queue = queue.Queue()
+        stop_event = threading.Event()
+        
+        # Stop the initial blocking stream to re-open in callback mode
+        stream.stop_stream()
+        stream.close()
+        
+        # Create the callback using partial to include extra parameters
+        callback = partial(audio_callback,
+                          multi_channel=multi_channel,
+                          channels=channels,
+                          stop_event=stop_event,
+                          audio_queue=audio_queue)
+        
+        # Reopen the stream in callback mode
+        stream = p.open(format=pyaudio.paInt16,
+                        channels=channels,
+                        rate=SAMPLE_RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK,
+                        input_device_index=device_index,
+                        stream_callback=callback)
+        
+        print("Audio processing initialized successfully")
+        
+        return {
+            "openai_client": openai_client,
+            "tts_engine": tts_engine,
+            "pyaudio": p,
+            "stream": stream,
+            "recognizer": recognizer,
+            "audio_queue": audio_queue,
+            "stop_event": stop_event
+        }
+    
+    except Exception as e:
+        print(f"Failed to initialize audio processing: {e}")
+        return None
 
 if __name__ == '__main__':
-    main()
+    print("This module is not meant to be run directly.")
+    print("Import it and call setup_audio_processing() to use its functionality.")

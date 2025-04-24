@@ -12,6 +12,9 @@ import threading
 from dotenv import load_dotenv
 from serial_manager import SerialManager, init_serial_manager
 
+# Add OpenAI import
+from openai import OpenAI
+
 # Load environment variables from .env file
 load_dotenv()
 
@@ -33,6 +36,13 @@ except Exception as e:
     logger.error(f"Failed to initialize serial manager: {e}")
     serial_manager = None
 
+# Import robot commands and initialize with serial manager
+import robot_commands
+robot_commands.initialize(serial_manager)
+
+# For backwards compatibility, import all functions from robot_commands into the global namespace
+from robot_commands import *
+
 dataCMD = json.dumps({'var': "", 'val': 0, 'ip': ""})
 upperGlobalIP = 'UPPER IP'
 
@@ -47,343 +57,14 @@ TURN_SPEED = 60  # Reduced speed for more precise rotation
 FORWARD_SPEED_CM_PER_SEC = 15
 BACKWARD_SPEED_CM_PER_SEC = 20
 
-
-def setUpperIP(ipInput):
-    global upperGlobalIP
-    upperGlobalIP = ipInput
-
-
-def forward(speed=100):
-    if not serial_manager:
-        logger.error("Serial manager not available, can't send forward command")
-        return False
-    
-    command = {'var': "move", 'val': 1}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        logger.info(f'Command sent: robot-forward (speed={speed})')
-        print('robot-forward')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to send forward command: {error}")
-        return False
-
-
-def backward(speed=100):
-    if not serial_manager:
-        logger.error("Serial manager not available, can't send backward command")
-        return False
-    
-    command = {'var': "move", 'val': 5}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        logger.info(f'Command sent: robot-backward (speed={speed})')
-        print('robot-backward')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to send backward command: {error}")
-        return False
-
-
-def left(speed=100):
-    if not serial_manager:
-        logger.error("Serial manager not available, can't send left command")
-        return False
-    
-    command = {'var': "move", 'val': 2}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        logger.info(f'Command sent: robot-left (speed={speed})')
-        print('robot-left')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to send left command: {error}")
-        return False
-
-
-def right(speed=100):
-    if not serial_manager:
-        logger.error("Serial manager not available, can't send right command")
-        return False
-    
-    command = {'var': "move", 'val': 4}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        logger.info(f'Command sent: robot-right (speed={speed})')
-        print('robot-right')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to send right command: {error}")
-        return False
-
-
-def stopLR():
-    if not serial_manager:
-        logger.error("Serial manager not available, can't send stopLR command")
-        return False
-    
-    command = {'var': "move", 'val': 6}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        logger.info('Command sent: robot-stop LR')
-        print('robot-stop')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to send stopLR command: {error}")
-        return False
-
-
-def stopFB():
-    if not serial_manager:
-        logger.error("Serial manager not available, can't send stopFB command")
-        return False
-    
-    command = {'var': "move", 'val': 3}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        logger.info('Command sent: robot-stop FB')
-        print('robot-stop')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to send stopFB command: {error}")
-        return False
-
-
-def lookUp():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "ges", 'val': 1}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-lookUp')
-        return True
-    return False
-
-
-def lookDown():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "ges", 'val': 2}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-lookDown')
-        return True
-    return False
-
-
-def lookStopUD():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "ges", 'val': 3}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-lookStopUD')
-        return True
-    return False
-
-
-def lookLeft():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "ges", 'val': 4}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-lookLeft')
-        return True
-    return False
-
-
-def lookRight():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "ges", 'val': 5}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-lookRight')
-        return True
-    return False
-
-
-def lookStopLR():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "ges", 'val': 6}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-lookStopLR')
-        return True
-    return False
-
-
-def resetGyroAngles():
-    """Reset the robot's internal gyroscope angle tracking"""
-    if not serial_manager:
-        logger.error("Serial manager not available, can't reset gyro angles")
-        return False
-    
-    result = serial_manager.send_command_sync('text', 'RESET_GYRO')
-    
-    if result and result.get('success'):
-        logger.info('Successfully reset gyroscope angles')
-        return True
-    else:
-        error = result.get('error', 'Unknown error')
-        logger.error(f"Failed to reset gyro angles: {error}")
-        return False
-
-
-def steadyMode():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 1}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-steady')
-        return True
-    return False
-
-
-def jump():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 4}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-jump')
-        return True
-    return False
-
-
-def handShake():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 3}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-handshake')
-        return True
-    return False
-
-
-def stayLow():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 2}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-stayLow')
-        return True
-    return False
-
-
-def actionA():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 5}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-actionA')
-        return True
-    return False
-
-
-def actionB():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 6}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-actionB')
-        return True
-    return False
-
-
-def actionC():
-    if not serial_manager:
-        return False
-    
-    command = {'var': "funcMode", 'val': 7}
-    result = serial_manager.send_command_sync('json', command)
-    
-    if result and result.get('success'):
-        print('robot-actionC')
-        return True
-    return False
-
-
-def lightCtrl(colorName, cmdInput):
-    if not serial_manager:
-        return False
-        
-    colorNum = 0
-    if colorName == 'off':
-        colorNum = 0
-    elif colorName == 'blue':
-        colorNum = 1
-    elif colorName == 'red':
-        colorNum = 2
-    elif colorName == 'green':
-        colorNum = 3
-    elif colorName == 'yellow':
-        colorNum = 4
-    elif colorName == 'cyan':
-        colorNum = 5
-    elif colorName == 'magenta':
-        colorNum = 6
-    elif colorName == 'cyber':
-        colorNum = 7
-        
-    command = {'var': "light", 'val': colorNum}
-    result = serial_manager.send_command_sync('json', command)
-    
-    return result and result.get('success', False)
-
-
-def buzzerCtrl(buzzerCtrl, cmdInput):
-    if not serial_manager:
-        return False
-        
-    command = {'var': "buzzer", 'val': buzzerCtrl}
-    result = serial_manager.send_command_sync('json', command)
-    
-    return result and result.get('success', False)
-
+# Try to import audio processing module
+try:
+    import robot_audio
+    audio_available = True
+    logger.info("Audio processing module loaded successfully")
+except ImportError as e:
+    audio_available = False
+    logger.error(f"Failed to import audio processing module: {e}")
 
 def diagnoseSerialIssues():
     """Run a comprehensive diagnostic on serial communication"""
@@ -439,46 +120,6 @@ def diagnoseSerialIssues():
     print("\n===== Diagnostic Complete =====")
     return True
 
-def testSerialConnection():
-    """Simple test of serial connection with ping"""
-    if not serial_manager:
-        return False
-    
-    try:
-        result = serial_manager.send_command_sync('text', 'PING', retry_count=1)
-        return result.get('success', False)
-    except Exception as e:
-        logger.error(f"Error testing serial connection: {e}")
-        return False
-
-def getGyroData():
-    """Get gyroscope data from the robot"""
-    if not serial_manager:
-        return None
-    
-    try:
-        result = serial_manager.send_command_sync('text', 'GET_GYRO', retry_count=1)
-        if result.get('success', False):
-            return result.get('data')
-        return None
-    except Exception as e:
-        logger.error(f"Error getting gyro data: {e}")
-        return None
-
-def getAccelData():
-    """Get accelerometer data from the robot"""
-    if not serial_manager:
-        return None
-    
-    try:
-        result = serial_manager.send_command_sync('text', 'GET_ACCEL', retry_count=1)
-        if result.get('success', False):
-            return result.get('data')
-        return None
-    except Exception as e:
-        logger.error(f"Error getting accelerometer data: {e}")
-        return None
-
 def test_movement_sequence():
     """Run a simple movement test sequence"""
     if not serial_manager:
@@ -511,6 +152,342 @@ def test_movement_sequence():
     
     print("\n===== Movement Sequence Complete =====")
 
+def run_bot():
+    """Run the robot with LLM-powered tool calling and voice control"""
+    print("\n===== Starting Voice-Controlled LLM-powered Robot =====")
+    
+    # Check if audio processing is available
+    if not audio_available:
+        print("❌ Audio processing module not available. Falling back to non-voice mode.")
+        return run_bot_non_voice()
+    
+    # Initialize audio processing components
+    audio_components = robot_audio.setup_audio_processing()
+    if not audio_components:
+        print("❌ Failed to initialize audio processing. Falling back to non-voice mode.")
+        return run_bot_non_voice()
+    
+    # Extract audio components
+    openai_client = audio_components["openai_client"]
+    tts_engine = audio_components["tts_engine"]
+    recognizer = audio_components["recognizer"]
+    audio_queue = audio_components["audio_queue"]
+    stop_event = audio_components["stop_event"]
+    
+    # Load tools from the tools description file
+    tool_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tool_descriptions.json')
+    try:
+        with open(tool_file_path, 'r') as f:
+            tool_data = json.load(f)
+            tools = tool_data.get('tools', [])
+            if not tools:
+                logger.warning("No tools found in tool_descriptions.json")
+                print("⚠️ Warning: No tools found in tool_descriptions.json")
+                return False
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.error(f"Error loading tool descriptions: {e}")
+        print(f"❌ Error loading tool descriptions: {e}")
+        return False
+    
+    # Load the dog_actions prompt
+    prompt_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dog_actions.md')
+    try:
+        with open(prompt_file_path, 'r') as f:
+            prompt_content = f.read()
+    except FileNotFoundError:
+        logger.error(f"Prompt file not found at {prompt_file_path}")
+        print(f"❌ Error: Prompt file not found at {prompt_file_path}")
+        return False
+    
+    try:
+        print("Voice assistant is now listening for the wake phrase...")
+        tts_engine.say("Robot is ready and listening")
+        tts_engine.runAndWait()
+        
+        # Initialize conversation history with system prompt
+        messages = [
+            {"role": "system", "content": prompt_content}
+        ]
+        
+        running = True
+        while running:
+            try:
+                # 1. Wait for the wake word
+                robot_audio.wait_for_wake_word(recognizer, audio_queue)
+                print("Wake word detected!")
+                
+                # Optional: Visual or sound indication that wake word was detected
+                try:
+                    lightCtrl("blue", 0)  # Blue light to indicate active listening
+                except:
+                    pass
+                
+                # 2. Listen for the command
+                command_text = robot_audio.listen_for_command(recognizer, audio_queue, tts_engine)
+                if not command_text:
+                    print("No command detected. Listening for wake word again...")
+                    robot_audio.flush_audio_queue(audio_queue)
+                    recognizer.Reset()
+                    continue
+                
+                print(f"Command received: '{command_text}'")
+                
+                # 3. Add user command to message history
+                messages.append({"role": "user", "content": command_text})
+                
+                # 4. Make the tool calling request to OpenAI
+                try:
+                    completion = openai_client.chat.completions.create(
+                        model="gpt-4o",
+                        messages=messages,
+                        tools=tools
+                    )
+                    
+                    # Process and display the response
+                    message = completion.choices[0].message
+                    print("\nLLM Response:")
+                    print(message.content)
+                    
+                    # Add assistant's response to the message history
+                    messages.append({
+                        "role": "assistant",
+                        "content": message.content,
+                        **({"tool_calls": message.tool_calls} if message.tool_calls else {})
+                    })
+                    
+                    # Speak the response
+                    tts_engine.say(message.content)
+                    tts_engine.runAndWait()
+                    
+                    # Check if there are tool calls
+                    if message.tool_calls:
+                        print("\nTool Calls Received:")
+                        for tool_call in message.tool_calls:
+                            print(f"Tool ID: {tool_call.id}")
+                            print(f"Function: {tool_call.function.name}")
+                            print(f"Arguments: {tool_call.function.arguments}")
+                            
+                            # Execute the tool call
+                            try:
+                                name = tool_call.function.name
+                                args = json.loads(tool_call.function.arguments) if tool_call.function.arguments.strip() else {}
+                                
+                                # Call the function and get the result
+                                result = call_function(name, args)
+                                
+                                # Add the result to the message history
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": str(result)
+                                })
+                                
+                                print(f"Tool result: {result}")
+                                
+                                # Speak a brief confirmation of tool execution
+                                if isinstance(result, str) and len(result) < 100:
+                                    tts_engine.say(f"Task complete: {result}")
+                                else:
+                                    tts_engine.say("Task complete")
+                                tts_engine.runAndWait()
+                                
+                            except Exception as e:
+                                error_msg = f"Error processing tool call: {str(e)}"
+                                logger.error(error_msg, exc_info=True)
+                                messages.append({
+                                    "role": "tool",
+                                    "tool_call_id": tool_call.id,
+                                    "content": f"Error: {error_msg}"
+                                })
+                                tts_engine.say("Error executing command")
+                                tts_engine.runAndWait()
+                    
+                except Exception as e:
+                    logger.error(f"Error in LLM tool calling: {e}", exc_info=True)
+                    print(f"❌ Error in LLM tool calling: {e}")
+                    tts_engine.say("I encountered an error processing your request")
+                    tts_engine.runAndWait()
+                
+                # Reset for next command
+                try:
+                    lightCtrl("off", 0)  # Turn off the blue light
+                except:
+                    pass
+                    
+                # Flush the audio queue and reset the recognizer for the next command
+                robot_audio.flush_audio_queue(audio_queue)
+                recognizer.Reset()
+                
+                # Periodically trim conversation history to prevent it from getting too long
+                if len(messages) > 10:  # Keep system message plus last 9 exchanges
+                    system_message = messages[0]
+                    messages = [system_message] + messages[-9:]
+                
+            except KeyboardInterrupt:
+                print("\nKeyboard interrupt received. Exiting...")
+                running = False
+            except Exception as e:
+                logger.error(f"Error in voice control loop: {e}", exc_info=True)
+                print(f"❌ Error in voice control loop: {e}")
+                # Try to recover and continue
+                robot_audio.flush_audio_queue(audio_queue)
+                recognizer.Reset()
+                
+    finally:
+        # Clean up resources
+        stop_event.set()  # Signal the audio callback to stop
+        robot_audio.cleanup_audio(audio_components["stream"], 
+                                 audio_components["pyaudio"], 
+                                 audio_components["tts_engine"])
+        try:
+            lightCtrl("off", 0)  # Turn off any lights
+        except:
+            pass
+    
+    print("\n===== Voice Control Session Ended =====")
+    return True
+
+def run_bot_non_voice():
+    """Run the robot with LLM-powered tool calling for autonomous operation (non-voice mode)"""
+    print("\n===== Starting LLM-powered Robot (Non-voice Mode) =====")
+    
+    # Initialize OpenAI client
+    try:
+        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+    except Exception as e:
+        logger.error(f"Failed to initialize OpenAI client: {e}")
+        print(f"❌ Error initializing OpenAI client: {e}")
+        return False
+    
+    # Load tools from the tools description file
+    tool_file_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tool_descriptions.json')
+    try:
+        with open(tool_file_path, 'r') as f:
+            tool_data = json.load(f)
+            tools = tool_data.get('tools', [])
+            if not tools:
+                logger.warning("No tools found in tool_descriptions.json")
+                print("⚠️ Warning: No tools found in tool_descriptions.json")
+    except (FileNotFoundError, json.JSONDecodeError) as e:
+        logger.error(f"Error loading tool descriptions: {e}")
+        print(f"❌ Error loading tool descriptions: {e}")
+        return False
+    
+    # Load the dog_actions prompt
+    prompt_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'dog_actions.md')
+    try:
+        with open(prompt_file_path, 'r') as f:
+            prompt_content = f.read()
+    except FileNotFoundError:
+        logger.error(f"Prompt file not found at {prompt_file_path}")
+        print(f"❌ Error: Prompt file not found at {prompt_file_path}")
+        return False
+    
+    # Initialize message history
+    messages = [
+        {"role": "system", "content": prompt_content},
+        {"role": "user", "content": "Can you tell me what you see?"}
+    ]
+    
+    # Maximum number of iterations to prevent infinite loops
+    max_iterations = 5
+    current_iteration = 0
+    
+    while current_iteration < max_iterations:
+        current_iteration += 1
+        print(f"\nSending request to LLM (iteration {current_iteration}/{max_iterations})...")
+        
+        try:
+            # Make the tool calling request to OpenAI
+            completion = client.chat.completions.create(
+                model="gpt-4o",  # Using gpt-4o as it supports tool calling
+                messages=messages,
+                tools=tools
+            )
+            
+            # Process and display the response
+            message = completion.choices[0].message
+            print("\nLLM Response:")
+            print(message.content)
+            
+            # Add assistant's response to the message history
+            messages.append({
+                "role": "assistant",
+                "content": message.content,
+                **({"tool_calls": message.tool_calls} if message.tool_calls else {})
+            })
+            
+            # Check if there are tool calls
+            if message.tool_calls:
+                print("\nTool Calls Received:")
+                for tool_call in message.tool_calls:
+                    print(f"Tool ID: {tool_call.id}")
+                    print(f"Function: {tool_call.function.name}")
+                    print(f"Arguments: {tool_call.function.arguments}")
+                    
+                    # Execute the tool call
+                    try:
+                        name = tool_call.function.name
+                        args = json.loads(tool_call.function.arguments) if tool_call.function.arguments.strip() else {}
+                        
+                        # Call the function and get the result
+                        result = call_function(name, args)
+
+                        print(result)
+                        
+                        # Add the result to the message history
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": str(result)
+                        })
+                        
+                        print(f"Tool result: {result}")
+                    except Exception as e:
+                        error_msg = f"Error processing tool call: {str(e)}"
+                        logger.error(error_msg, exc_info=True)
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": f"Error: {error_msg}"
+                        })
+            else:
+                # No more tool calls, we're done
+                print("\nNo more tool calls, conversation complete.")
+                break
+                
+        except Exception as e:
+            logger.error(f"Error in LLM tool calling: {e}", exc_info=True)
+            print(f"❌ Error in LLM tool calling: {e}")
+            return False
+    
+    if current_iteration >= max_iterations:
+        print(f"\nReached maximum iterations ({max_iterations}), stopping.")
+    
+    print("\n===== LLM Tool Calling Complete =====")
+    return True
+
+# Make call_function available at module level for audio-based operation
+def call_function(name, args):
+    print(f"Executing function: {name} with args: {args}")
+    try:
+        # Import tools module dynamically to avoid circular imports
+        sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+        import tools
+        
+        # Check if the function exists in the tools module
+        if hasattr(tools, name):
+            function = getattr(tools, name)
+            return function(**args)
+        else:
+            error_msg = f"Function {name} not found in tools module"
+            logger.error(error_msg)
+            return {"error": error_msg}
+    except Exception as e:
+        error_msg = f"Error executing {name}: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return {"error": error_msg}
+
 # rotate_to_angle and move_distance functions have been moved to tools.py
 
 if __name__ == '__main__':
@@ -530,6 +507,20 @@ if __name__ == '__main__':
                 print("Gyroscope angles reset successfully")
             else:
                 print("Failed to reset gyroscope angles")
+            sys.exit(0)
+        elif sys.argv[1] == "run_bot":
+            # Run the robot with LLM tool calling
+            if run_bot():
+                print("Robot run successfully completed.")
+            else:
+                print("Robot run encountered errors.")
+            sys.exit(0)
+        elif sys.argv[1] == "voice_control":
+            # Run the robot with voice control
+            if run_bot_voice_control():
+                print("Voice control session ended successfully.")
+            else:
+                print("Voice control encountered errors.")
             sys.exit(0)
         elif sys.argv[1] == "test_movement":
             # Run movement test

@@ -84,7 +84,7 @@ def load_tool_descriptions():
             return json.load(file)
     except Exception as e:
         logger.error(f"Error loading tool descriptions: {e}")
-        return []
+        return {"tools": []}
 
 def read_dog_eyes_prompt():
     """
@@ -264,6 +264,7 @@ def view_surroundings():
     
     # Get and return description
     description = sendImageToLLM(image_path)
+    logger.info(f"Received description from LLM: {description}")
     return description
 
 def test_camera(num_screenshots=1, delay=1, save_dir=None):
@@ -575,36 +576,8 @@ available_tools = {
     "move_distance": move_distance
 }
 
-# Tool descriptions for documentation and help commands
-tool_descriptions = [
-    {
-        "name": "view_surroundings",
-        "description": "Take a photo and analyze what the robot can see",
-        "parameters": []
-    },
-    {
-        "name": "rotate_to_angle",
-        "description": "Rotate the robot by a specified angle in degrees",
-        "parameters": [
-            {
-                "name": "angle",
-                "type": "number",
-                "description": "Angle to rotate in degrees (positive for right, negative for left)"
-            }
-        ]
-    },
-    {
-        "name": "move_distance",
-        "description": "Move the robot forward or backward by a specified distance",
-        "parameters": [
-            {
-                "name": "distance",
-                "type": "number",
-                "description": "Distance to move in centimeters (positive for forward, negative for backward)"
-            }
-        ]
-    }
-]
+# Get tool descriptions from JSON file instead of defining them inline
+tool_descriptions = load_tool_descriptions().get("tools", [])
 
 if __name__ == '__main__':
     # When run directly, test the camera and LLM
