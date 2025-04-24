@@ -1,16 +1,16 @@
 #!/usr/bin/env/python3
 # File name   : robot.py
-# Description : Robot interfaces.
+# Description : Robot interfaces and core movement controls.
 import json
+import logging
+import sys
 import time
 import os
-import sys
-import datetime
-import serial
-import atexit
-import base64
-import logging
+import queue
+import threading
+
 from dotenv import load_dotenv
+from serial_manager import SerialManager, init_serial_manager
 
 # Load environment variables from .env file
 load_dotenv()
@@ -26,53 +26,26 @@ logging.basicConfig(
 )
 logger = logging.getLogger("robot")
 
-# Initialize OpenAI client
+# Initialize serial manager
 try:
-    from openai import OpenAI
-    # Initialize with API key from environment variables
-    client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-    openai_available = True
-except ImportError:
-    logger.warning("OpenAI library not installed. Vision features will be disabled.")
-    openai_available = False
+    serial_manager = init_serial_manager()
 except Exception as e:
-    logger.error(f"Error initializing OpenAI client: {e}")
-    openai_available = False
+    logger.error(f"Failed to initialize serial manager: {e}")
+    serial_manager = None
 
-# Add numpy and OpenCV imports at the top
-try:
-    import numpy as np
-    import cv2
-except ImportError:
-    logger.warning("NumPy or OpenCV is not installed. Camera functionality will be limited.")
-
-# Initialize serial connection
-ser = serial.Serial("/dev/ttyS0", 115200)
 dataCMD = json.dumps({'var': "", 'val': 0, 'ip': ""})
 upperGlobalIP = 'UPPER IP'
 
-# Initialize camera globally for faster access
-print("Initializing camera...")
-camera = None
-try:
-    camera = cv2.VideoCapture(0)
-    if not camera.isOpened():
-        print("Warning: Could not open camera on startup")
-    else:
-        print("Camera initialized successfully")
-except Exception as e:
-    print(f"Error initializing camera: {e}")
-
-# Function to clean up resources when the script exits
-def cleanup():
-    if camera is not None and camera.isOpened():
-        camera.release()
-        print("Camera released during cleanup")
-
-# Register the cleanup function to be called when the program exits
-atexit.register(cleanup)
-
 pitch, roll = 0, 0
+
+# Constants for movement speed
+MOVE_FORWARD_SPEED = 70  # Reduced speed for more controlled movement
+MOVE_BACKWARD_SPEED = 70
+TURN_SPEED = 60  # Reduced speed for more precise rotation
+
+# Constants for time-based movement (cm/sec)
+FORWARD_SPEED_CM_PER_SEC = 15
+BACKWARD_SPEED_CM_PER_SEC = 20
 
 
 def setUpperIP(ipInput):
@@ -81,96 +54,303 @@ def setUpperIP(ipInput):
 
 
 def forward(speed=100):
-    dataCMD = json.dumps({'var': "move", 'val': 1})
-    ser.write(dataCMD.encode())
-    print('robot-forward')
+    if not serial_manager:
+        logger.error("Serial manager not available, can't send forward command")
+        return False
+    
+    command = {'var': "move", 'val': 1}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        logger.info(f'Command sent: robot-forward (speed={speed})')
+        print('robot-forward')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to send forward command: {error}")
+        return False
 
 
 def backward(speed=100):
-    dataCMD = json.dumps({'var': "move", 'val': 5})
-    ser.write(dataCMD.encode())
-    print('robot-backward')
+    if not serial_manager:
+        logger.error("Serial manager not available, can't send backward command")
+        return False
+    
+    command = {'var': "move", 'val': 5}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        logger.info(f'Command sent: robot-backward (speed={speed})')
+        print('robot-backward')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to send backward command: {error}")
+        return False
 
 
 def left(speed=100):
-    dataCMD = json.dumps({'var': "move", 'val': 2})
-    ser.write(dataCMD.encode())
-    print('robot-left')
+    if not serial_manager:
+        logger.error("Serial manager not available, can't send left command")
+        return False
+    
+    command = {'var': "move", 'val': 2}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        logger.info(f'Command sent: robot-left (speed={speed})')
+        print('robot-left')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to send left command: {error}")
+        return False
 
 
 def right(speed=100):
-    dataCMD = json.dumps({'var': "move", 'val': 4})
-    ser.write(dataCMD.encode())
-    print('robot-right')
+    if not serial_manager:
+        logger.error("Serial manager not available, can't send right command")
+        return False
+    
+    command = {'var': "move", 'val': 4}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        logger.info(f'Command sent: robot-right (speed={speed})')
+        print('robot-right')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to send right command: {error}")
+        return False
 
 
 def stopLR():
-    dataCMD = json.dumps({'var': "move", 'val': 6})
-    ser.write(dataCMD.encode())
-    print('robot-stop')
+    if not serial_manager:
+        logger.error("Serial manager not available, can't send stopLR command")
+        return False
+    
+    command = {'var': "move", 'val': 6}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        logger.info('Command sent: robot-stop LR')
+        print('robot-stop')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to send stopLR command: {error}")
+        return False
 
 
 def stopFB():
-    dataCMD = json.dumps({'var': "move", 'val': 3})
-    ser.write(dataCMD.encode())
-    print('robot-stop')
+    if not serial_manager:
+        logger.error("Serial manager not available, can't send stopFB command")
+        return False
+    
+    command = {'var': "move", 'val': 3}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        logger.info('Command sent: robot-stop FB')
+        print('robot-stop')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to send stopFB command: {error}")
+        return False
 
 
 def lookUp():
-    dataCMD = json.dumps({'var': "ges", 'val': 1})
-    ser.write(dataCMD.encode())
-    print('robot-lookUp')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "ges", 'val': 1}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-lookUp')
+        return True
+    return False
 
 
 def lookDown():
-    dataCMD = json.dumps({'var': "ges", 'val': 2})
-    ser.write(dataCMD.encode())
-    print('robot-lookDown')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "ges", 'val': 2}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-lookDown')
+        return True
+    return False
 
 
 def lookStopUD():
-    dataCMD = json.dumps({'var': "ges", 'val': 3})
-    ser.write(dataCMD.encode())
-    print('robot-lookStopUD')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "ges", 'val': 3}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-lookStopUD')
+        return True
+    return False
 
 
 def lookLeft():
-    dataCMD = json.dumps({'var': "ges", 'val': 4})
-    ser.write(dataCMD.encode())
-    print('robot-lookLeft')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "ges", 'val': 4}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-lookLeft')
+        return True
+    return False
 
 
 def lookRight():
-    dataCMD = json.dumps({'var': "ges", 'val': 5})
-    ser.write(dataCMD.encode())
-    print('robot-lookRight')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "ges", 'val': 5}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-lookRight')
+        return True
+    return False
 
 
 def lookStopLR():
-    dataCMD = json.dumps({'var': "ges", 'val': 6})
-    ser.write(dataCMD.encode())
-    print('robot-lookStopLR')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "ges", 'val': 6}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-lookStopLR')
+        return True
+    return False
+
+
+def resetGyroAngles():
+    """Reset the robot's internal gyroscope angle tracking"""
+    if not serial_manager:
+        logger.error("Serial manager not available, can't reset gyro angles")
+        return False
+    
+    result = serial_manager.send_command_sync('text', 'RESET_GYRO')
+    
+    if result and result.get('success'):
+        logger.info('Successfully reset gyroscope angles')
+        return True
+    else:
+        error = result.get('error', 'Unknown error')
+        logger.error(f"Failed to reset gyro angles: {error}")
+        return False
 
 
 def steadyMode():
-    dataCMD = json.dumps({'var': "funcMode", 'val': 1})
-    ser.write(dataCMD.encode())
-    print('robot-steady')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 1}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-steady')
+        return True
+    return False
 
 
 def jump():
-    dataCMD = json.dumps({'var': "funcMode", 'val': 4})
-    ser.write(dataCMD.encode())
-    print('robot-jump')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 4}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-jump')
+        return True
+    return False
 
 
 def handShake():
-    dataCMD = json.dumps({'var': "funcMode", 'val': 3})
-    ser.write(dataCMD.encode())
-    print('robot-handshake')
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 3}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-handshake')
+        return True
+    return False
+
+
+def stayLow():
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 2}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-stayLow')
+        return True
+    return False
+
+
+def actionA():
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 5}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-actionA')
+        return True
+    return False
+
+
+def actionB():
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 6}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-actionB')
+        return True
+    return False
+
+
+def actionC():
+    if not serial_manager:
+        return False
+    
+    command = {'var': "funcMode", 'val': 7}
+    result = serial_manager.send_command_sync('json', command)
+    
+    if result and result.get('success'):
+        print('robot-actionC')
+        return True
+    return False
 
 
 def lightCtrl(colorName, cmdInput):
+    if not serial_manager:
+        return False
+        
     colorNum = 0
     if colorName == 'off':
         colorNum = 0
@@ -188,325 +368,310 @@ def lightCtrl(colorName, cmdInput):
         colorNum = 6
     elif colorName == 'cyber':
         colorNum = 7
-    dataCMD = json.dumps({'var': "light", 'val': colorNum})
-    ser.write(dataCMD.encode())
+        
+    command = {'var': "light", 'val': colorNum}
+    result = serial_manager.send_command_sync('json', command)
+    
+    return result and result.get('success', False)
 
 
 def buzzerCtrl(buzzerCtrl, cmdInput):
-    dataCMD = json.dumps({'var': "buzzer", 'val': buzzerCtrl})
-    ser.write(dataCMD.encode())
-
-
-def getGyroDataSingle():
-    """
-    Single attempt to request gyroscope data from the robot
-    Returns a dictionary with gyro data or None on error
-    """
-    # Clear any existing data in the buffer
-    ser.reset_input_buffer()
-
-    # Send request command for gyroscope data
-    ser.write("GET_GYRO\n".encode())
-
-    # Wait for response with timeout
-    start_time = time.time()
-    timeout = 0.05  # Short timeout for quicker retries
-    
-    while (time.time() - start_time) < timeout:
-        if ser.in_waiting:
-            try:
-                response = ser.readline().decode('utf-8').strip()
-                
-                # Check for the identifier prefix to ensure we're reading the right message
-                if response.startswith("GYRO_DATA:"):
-                    # Extract the JSON part
-                    json_data = response[len("GYRO_DATA:"):]
-
-                    try:
-                        # Parse JSON response
-                        gyro_data = json.loads(json_data)
-                        
-                        # Validate that the response has the expected fields
-                        required_fields = ['gyro_x', 'gyro_y', 'gyro_z', 'angle_x', 'angle_y', 'angle_z']
-                        if all(key in gyro_data for key in required_fields):
-                            return gyro_data
-                        else:
-                            print("Error: Incomplete gyroscope data received")
-                            return None
-                    except json.JSONDecodeError:
-                        print(f"Error: Failed to parse gyroscope data JSON: {json_data}")
-                        return None
-            except UnicodeDecodeError:
-                # Bad data, continue looking
-                pass
+    if not serial_manager:
+        return False
         
-        # Small delay to prevent CPU overload
-        time.sleep(0.005)
+    command = {'var': "buzzer", 'val': buzzerCtrl}
+    result = serial_manager.send_command_sync('json', command)
     
-    # If we get here, we timed out
-    return None
+    return result and result.get('success', False)
+
+
+def diagnoseSerialIssues():
+    """Run a comprehensive diagnostic on serial communication"""
+    print("\n===== Serial Connection Diagnostics =====")
+    
+    if not serial_manager:
+        print("❌ Serial manager not initialized!")
+        logger.error("Serial manager not initialized, can't diagnose")
+        return False
+    
+    # 1. Check if connection exists
+    if not serial_manager.connected:
+        print("❌ Serial not connected!")
+        logger.error("Serial not connected")
+        return False
+    
+    print("✓ Serial manager initialized")
+    print(f"Port: {serial_manager.port}")
+    print(f"Baudrate: {serial_manager.baudrate}")
+    
+    # 2. Test basic connectivity
+    print("\nTesting basic serial connectivity...")
+    ping_result = serial_manager.send_command_sync('text', 'PING', retry_count=5)
+    if ping_result.get('success', False):
+        print("✓ Communication test passed")
+    else:
+        print("❌ Communication test failed!")
+        
+    # 3. Try to get sensor data
+    print("\nTesting gyroscope data retrieval...")
+    print("Resetting gyroscope angles...")
+    resetGyroAngles()  # Reset angles before testing
+    print("✓ Gyroscope angles reset")
+    print("Waiting for 1 second...")
+    time.sleep(1)  # Allow some time for the reset to take effect
+    gyro = getGyroData()
+    if gyro:
+        print("✓ Gyroscope data received:")
+        print(f"  Rotation rates: X={gyro['gyro_x']:+8.4f}, Y={gyro['gyro_y']:+8.4f}, Z={gyro['gyro_z']:+8.4f}")
+        print(f"  Cumulative angles: X={gyro['angle_x']:+8.4f}, Y={gyro['angle_y']:+8.4f}, Z={gyro['angle_z']:+8.4f}")
+    else:
+        print("❌ Failed to get gyroscope data!")
+        
+        # Try alternative sensors
+        print("\nTrying accelerometer as alternative...")
+        accel = getAccelData()
+        if accel:
+            print("✓ Accelerometer data received:")
+            print(f"  Acceleration: X={accel['acc_x']:+8.4f}, Y={accel['acc_y']:+8.4f}, Z={accel['acc_z']:+8.4f}")
+        else:
+            print("❌ Failed to get accelerometer data!")
+    
+    print("\n===== Diagnostic Complete =====")
+    return True
+
+def testSerialConnection():
+    """Simple test of serial connection with ping"""
+    if not serial_manager:
+        return False
+    
+    try:
+        result = serial_manager.send_command_sync('text', 'PING', retry_count=1)
+        return result.get('success', False)
+    except Exception as e:
+        logger.error(f"Error testing serial connection: {e}")
+        return False
 
 def getGyroData():
-    """
-    Request gyroscope data with retries
-    Makes up to 5 attempts to get valid data
-    Returns a dictionary with gyro_x, gyro_y, gyro_z, angle_x, angle_y, angle_z values or None if all attempts fail
-    """
-    max_attempts = 5
-    
-    for attempt in range(1, max_attempts + 1):
-        gyro_data = getGyroDataSingle()
-        if gyro_data:
-            return gyro_data
-        
-        # If not the last attempt, print message and wait a tiny bit before retry
-        if attempt < max_attempts:
-            print(f"Retry {attempt}/{max_attempts} for gyro data")
-            time.sleep(0.01)  # Small delay between retries
-    
-    print(f"Error: Failed to get gyro data after {max_attempts} attempts")
-    return None
-
-def resetGyroAngles():
-    """Reset the cumulative gyroscope angles on the robot"""
-    ser.reset_input_buffer()
-    ser.write("RESET_GYRO\n".encode())
-    
-    # Wait for acknowledgement
-    start_time = time.time()
-    timeout = 1.0
-    
-    while (time.time() - start_time) < timeout:
-        if ser.in_waiting:
-            response = ser.readline().decode('utf-8').strip()
-            if response == "ACK:GYRO_RESET":
-                return True
-        time.sleep(0.01)
-    
-    print("Error: No acknowledgement received for gyro reset")
-    return False
-
-def read_dog_eyes_prompt():
-    """
-    Read the prompt content from dog_eyes.md file
-    
-    Returns:
-    - str: The content of the file or a default prompt if file cannot be read
-    """
-    prompt_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "dog_eyes.md")
+    """Get gyroscope data from the robot"""
+    if not serial_manager:
+        return None
     
     try:
-        if not os.path.exists(prompt_path):
-            logger.warning(f"dog_eyes.md not found at {prompt_path}")
-            return "Please describe what you see in this image in detail, focusing on objects and their positions."
-            
-        with open(prompt_path, "r") as f:
-            content = f.read()
-            logger.info(f"Successfully read prompt from {prompt_path}")
-            return content
+        result = serial_manager.send_command_sync('text', 'GET_GYRO', retry_count=1)
+        if result.get('success', False):
+            return result.get('data')
+        return None
     except Exception as e:
-        logger.error(f"Error reading dog_eyes.md: {e}")
-        return "Please describe what you see in this image in detail, focusing on objects and their positions."
-
-def encode_image(image_path):
-    """
-    Encode an image as base64
-    
-    Parameters:
-    - image_path: Path to the image file
-    
-    Returns:
-    - str: Base64 encoded image
-    """
-    try:
-        with open(image_path, "rb") as image_file:
-            return base64.b64encode(image_file.read()).decode("utf-8")
-    except Exception as e:
-        logger.error(f"Error encoding image {image_path}: {e}")
+        logger.error(f"Error getting gyro data: {e}")
         return None
 
-def sendImageToLLM(image_path, custom_prompt=None, model="gpt-4o"):
-    """
-    Send an image to OpenAI's GPT-4 Vision model for analysis
-    
-    Parameters:
-    - image_path: Path to the image file
-    - custom_prompt: Optional custom prompt to use instead of dog_eyes.md
-    - model: OpenAI model to use (defaults to GPT-4 Vision)
-    
-    Returns:
-    - str: The model's response or error message
-    """
-    if not openai_available:
-        return "Error: OpenAI library not available. Cannot process image."
-    
-    # Check if image exists
-    if not os.path.exists(image_path):
-        logger.error(f"Image file not found: {image_path}")
-        return f"Error: Image file not found: {image_path}"
+def getAccelData():
+    """Get accelerometer data from the robot"""
+    if not serial_manager:
+        return None
     
     try:
-        # Encode the image
-        base64_image = encode_image(image_path)
-        if not base64_image:
-            return "Error: Could not encode image"
-        
-        # Get prompt from dog_eyes.md or use custom prompt
-        prompt = custom_prompt if custom_prompt else read_dog_eyes_prompt()
-        
-        logger.info(f"Sending image {image_path} to OpenAI API")
-        
-        # Send request to OpenAI
-        completion = client.chat.completions.create(
-            model=model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{base64_image}",
-                            },
-                        },
-                    ],
-                }
-            ],
-        )
-        
-        # Extract and return the response
-        response = completion.choices[0].message.content
-        logger.info("Successfully received response from OpenAI API")
-        return response
-        
+        result = serial_manager.send_command_sync('text', 'GET_ACCEL', retry_count=1)
+        if result.get('success', False):
+            return result.get('data')
+        return None
     except Exception as e:
-        logger.error(f"Error in sendImageToLLM: {e}", exc_info=True)
-        return f"Error processing image with OpenAI: {str(e)}"
+        logger.error(f"Error getting accelerometer data: {e}")
+        return None
 
-def takeScreenshot(num_screenshots=1, delay=1, save_dir=None):
-    """
-    Capture screenshots using the pre-initialized camera
+def test_movement_sequence():
+    """Run a simple movement test sequence"""
+    if not serial_manager:
+        print("Serial manager not initialized!")
+        return
+        
+    print("\n===== Testing Robot Movement =====")
     
-    Parameters:
-    - num_screenshots: Number of screenshots to take
-    - delay: Time in seconds between screenshots
-    - save_dir: Directory to save screenshots (defaults to 'screenshots')
+    # First test connection
+    print("1. Testing communication...")
+    if not testSerialConnection():
+        print("❌ Failed to communicate with robot, aborting movement test")
+        return
+    print("✓ Communication successful")
     
-    Returns:
-    - List of saved screenshot paths
-    """
-    global camera
+    # Try a simple movement command
+    print("\n2. Testing forward movement...")
+    move_cmd = {'var': 'move', 'val': 1}  # 1 = Forward
+    result = serial_manager.send_command_sync('json', move_cmd)
+    print(f"Result: {result}")
     
-    # Set up default save directory
-    if save_dir is None:
-        save_dir = 'screenshots'
+    # Wait a moment
+    time.sleep(1)
     
-    # Create directory if it doesn't exist
-    os.makedirs(save_dir, exist_ok=True)
+    # Stop movement
+    print("\n3. Stopping movement...")
+    stop_cmd = {'var': 'move', 'val': 3}  # 3 = FBStop
+    result = serial_manager.send_command_sync('json', stop_cmd)
+    print(f"Result: {result}")
     
-    # Check if camera is initialized and open
-    if camera is None or not camera.isOpened():
-        print("Camera not available, attempting to initialize...")
-        camera = cv2.VideoCapture(0)
-        if not camera.isOpened():
-            print("Error: Could not open camera")
-            return []
-    
-    saved_paths = []
-    
-    try:
-        for i in range(num_screenshots):
-            # Capture frame
-            print(f"Capturing image {i+1}/{num_screenshots}...")
-            ret, frame = camera.read()
-            
-            if not ret:
-                print(f"Error: Could not capture frame {i+1}")
-                continue
-                
-            # Generate filename with timestamp
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"screenshot_{timestamp}_{i+1}.jpg"
-            filepath = os.path.join(save_dir, filename)
-            
-            # Save image
-            cv2.imwrite(filepath, frame)
-            print(f"Saved: {filepath}")
-            saved_paths.append(filepath)
-            
-            # Wait before next capture
-            if i < num_screenshots - 1:
-                time.sleep(delay)
-    
-    except Exception as e:
-        print(f"Error capturing screenshot: {e}")
-    
-    return saved_paths
+    print("\n===== Movement Sequence Complete =====")
 
-def test_camera(num_screenshots=1, delay=1, save_dir=None):
-    """
-    Legacy method that now uses the new takeScreenshot method.
-    """
-    return takeScreenshot(num_screenshots, delay, save_dir)
+# rotate_to_angle and move_distance functions have been moved to tools.py
 
 if __name__ == '__main__':
-    # Add an option to test the camera
-    if len(sys.argv) > 1 and sys.argv[1] == "camera":
-        # Parse optional arguments for number of screenshots and delay
-        num_screenshots = 1
-        delay = 1
-        
-        if len(sys.argv) > 2:
+    if len(sys.argv) > 1:
+        # Process command line arguments
+        if sys.argv[1] == "diagnose":
+            # Run diagnostic tests
+            diagnoseSerialIssues()
+            sys.exit(0)
+        elif sys.argv[1] == "test_serial":
+            # Just test serial connection
+            testSerialConnection()
+            sys.exit(0)
+        elif sys.argv[1] == "reset_gyro":
+            # Reset gyroscope angles
+            if resetGyroAngles():
+                print("Gyroscope angles reset successfully")
+            else:
+                print("Failed to reset gyroscope angles")
+            sys.exit(0)
+        elif sys.argv[1] == "test_movement":
+            # Run movement test
             try:
-                num_screenshots = int(sys.argv[2])
-            except ValueError:
-                pass
+                # Import tools dynamically to avoid circular imports
+                sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+                from tools import move_distance, rotate_to_angle
                 
-        if len(sys.argv) > 3:
+                print("\n===== Testing Robot Movement =====")
+                
+                # Test sequence: forward 1 meter, rotate 45 degrees, rotate back -45 degrees
+                print("\n1. Moving forward 100 cm (1 meter)...")
+                result = move_distance(100)
+                print(f"Result: {result}")
+                
+                # Wait between movements
+                print("Waiting 2 seconds...")
+                time.sleep(2)
+                
+                print("\n2. Rotating 45 degrees clockwise...")
+                result = rotate_to_angle(45)
+                print(f"Result: {result}")
+                
+                # Wait between movements
+                print("Waiting 2 seconds...")
+                time.sleep(2)
+                
+                print("\n3. Rotating 45 degrees counter-clockwise...")
+                result = rotate_to_angle(-45)
+                print(f"Result: {result}")
+                
+                print("\n===== Movement Test Complete =====")
+                
+                sys.exit(0)
+            except ImportError as e:
+                print(f"Error importing tools module: {e}")
+                logger.error(f"Error importing tools module: {e}")
+                sys.exit(1)
+            except Exception as e:
+                print(f"Error during movement test: {e}")
+                logger.error(f"Error during movement test: {e}", exc_info=True)
+                sys.exit(1)
+        elif sys.argv[1] == "test_sequence":
             try:
-                delay = float(sys.argv[3])
-            except ValueError:
-                pass
-                
-        test_camera(num_screenshots, delay)
-    else:
-        # Test image capture and LLM analysis
-        print("Testing image capture and LLM analysis...")
-        
-        # Take a screenshot
-        screenshots = takeScreenshot(1)
-        if not screenshots:
-            print("Failed to capture any screenshots.")
-            sys.exit(1)
-        
-        # Send the image to the LLM
-        image_path = screenshots[0]
-        print(f"Sending image {image_path} to LLM...")
-        
-        response = sendImageToLLM(image_path)
-        print("LLM Response:")
-        print(response)
-        
-        # Commented out gyro testing code
-        """
-        # Reset gyro angles before starting
-        resetGyroAngles()
-        
-        # Example of how to get gyroscope data
-        while True:
+                test_movement_sequence()
+                sys.exit(0)
+            except ImportError:
+                print("Error: Could not import movement tools from tools.py")
+                sys.exit(1)
+            except Exception as e:
+                print(f"Error during movement sequence: {e}")
+                sys.exit(1)
+    
+    # Default behavior - improved diagnostics and monitoring
+    print("\nRunning basic serial diagnostics first...")
+    diagnoseSerialIssues()
+    
+    print("\nStarting continuous gyro monitoring (Ctrl+C to exit)...")
+    while True:
+        try:
             # Get and print gyroscope data
             gyro = getGyroData()
             if gyro:
-                print("Gyro X: {:.4f}, Y: {:.4f}, Z: {:.4f}".format(
-                    gyro['gyro_x'], gyro['gyro_y'], gyro['gyro_z']))
-                print("Angle X: {:.4f}, Y: {:.4f}, Z: {:.4f}".format(
-                    gyro['angle_x'], gyro['angle_y'], gyro['angle_z']))
+                print("\nGyroscope Data:")
+                print(f"  Rotation rates (°/s): X={gyro['gyro_x']:+8.4f}, Y={gyro['gyro_y']:+8.4f}, Z={gyro['gyro_z']:+8.4f}")
+                print(f"  Cumulative angles (°): X={gyro['angle_x']:+8.4f}, Y={gyro['angle_y']:+8.4f}, Z={gyro['angle_z']:+8.4f}")
+            else:
+                print("No gyroscope data received, trying again...")
+            time.sleep(2)  # Short delay between data requests
+        except KeyboardInterrupt:
+            print("\nExiting...")
+            break
+        except Exception as e:
+            print(f"Error: {e}")
+            logger.error(f"Error in monitoring loop: {e}", exc_info=True)
+            time.sleep(2)  # Add delay to avoid rapid error loops
+    
+    # Check for command line arguments
+    if len(sys.argv) > 1 and sys.argv[1] == "test_movement":
+        # Import tools for testing movement
+        try:
+            from tools import rotate_to_angle, move_distance
             
-            # Wait between readings
-            time.sleep(0.5)
-        """
-    # jump()
-    # while 1:
-    #     time.sleep(1)
-    #     pass
+            print("\n===== Testing Robot Movement =====")
+            
+            # Test sequence: forward 1 meter, rotate 45 degrees, rotate back -45 degrees
+            print("\n1. Moving forward 100 cm (1 meter)...")
+            result = move_distance(100)
+            print(f"Result: {result}")
+            
+            # Wait between movements
+            print("Waiting 2 seconds...")
+            time.sleep(2)
+            
+            print("\n2. Rotating 45 degrees clockwise...")
+            result = rotate_to_angle(45)
+            print(f"Result: {result}")
+            
+            # Wait between movements
+            print("Waiting 2 seconds...")
+            time.sleep(2)
+            
+            print("\n3. Rotating 45 degrees counter-clockwise...")
+            result = rotate_to_angle(-45)
+            print(f"Result: {result}")
+            
+            print("\n===== Movement Test Complete =====")
+            
+            sys.exit(0)
+        except ImportError:
+            print("Error: Could not import movement tools from tools.py")
+            sys.exit(1)
+        except Exception as e:
+            print(f"Error during movement test: {e}")
+            sys.exit(1)
+    
+    # Default camera test if no specific test is requested
+    # Import tools only when needed
+    from tools import test_camera, view_surroundings
+
+    # Parse optional arguments for number of screenshots and delay
+    num_screenshots = 1
+    delay = 1
+
+    if len(sys.argv) > 2:
+        try:
+            num_screenshots = int(sys.argv[2])
+        except ValueError:
+            pass
+
+    if len(sys.argv) > 3:
+        try:
+            delay = float(sys.argv[3])
+        except ValueError:
+            pass
+
+    test_camera(num_screenshots, delay)
+
+    # Test view_surroundings function
+    try:
+        print("\nTesting view_surroundings function:")
+        description = view_surroundings()
+        print(description)
+    except Exception as e:
+        print(f"Error testing view_surroundings: {e}")
