@@ -44,6 +44,24 @@
           "properties": {}
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "change_posture",
+        "description": "Changes the robot's posture to stay low or shake hands.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "posture": {
+              "type": "string",
+              "enum": ["stay_low", "shake_hands"],
+              "description": "The posture to change to: 'stay_low' or 'shake_hands'."
+            }
+          },
+          "required": ["posture"]
+        }
+      }
     }
   ]
 }

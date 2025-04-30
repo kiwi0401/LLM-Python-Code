@@ -26,6 +26,8 @@ logger = logging.getLogger("tools")
 load_dotenv()
 
 # Import robot control functions first - these are essential
+from robot_commands import change_posture, forward, backward, left
+# from robot import rotate_to_angle, move_distance
 try:
     import robot  # Import the entire module to avoid circular import issues
     logger.info("Successfully imported robot module")
@@ -573,7 +575,8 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
 available_tools = {
     "view_surroundings": view_surroundings,
     "rotate_to_angle": rotate_to_angle,
-    "move_distance": move_distance
+    "move_distance": move_distance,
+    "change_posture": change_posture
 }
 
 # Get tool descriptions from JSON file instead of defining them inline

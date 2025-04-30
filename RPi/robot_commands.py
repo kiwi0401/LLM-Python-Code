@@ -298,6 +298,14 @@ def actionC():
         return True
     return False
 
+def change_posture(posture):
+    if posture == "stay_low":
+        return stayLow()
+    elif posture == "shake_hands":
+        return handShake()
+    else:
+        return "Unknown posture"
+
 def lightCtrl(colorName, cmdInput):
     if not serial_manager:
         return False
