@@ -134,12 +134,17 @@ def listen_for_command(recognizer, audio_queue, tts_engine=None):
     if tts_engine:
         tts_engine.say("Waiting for command")
         tts_engine.runAndWait()
+        time.sleep(1)  # Add delay after speaking
+        flush_audio_queue(audio_queue)
     recognizer.Reset()  # Start fresh for command capture
     command_text = ""
     silence_duration = 0
     max_command_time = 10.0  # seconds
     start_time = time.time()
 
+    print("\nHearing: ", end='', flush=True)  # Start the hearing line
+    last_partial = ""  # Keep track of last partial text
+    
     while time.time() - start_time < max_command_time:
         try:
             data = audio_queue.get(timeout=0.5)
@@ -154,12 +159,18 @@ def listen_for_command(recognizer, audio_queue, tts_engine=None):
         if recognizer.AcceptWaveform(data):
             result = recognizer.Result()
             result_text = eval(result).get("text", "")
-            command_text += (" " + result_text).strip()
-            # Assuming one final result is enough
-            break
+            if result_text:  # Only add non-empty results
+                command_text += (" " + result_text).strip()
+                print(f"\rHearing: {command_text}", end='', flush=True)
         else:
-            # Optionally process partial results if needed
-            _ = eval(recognizer.PartialResult()).get("partial", "")
+            # Show partial results in real-time
+            partial_result = recognizer.PartialResult()
+            partial_text = eval(partial_result).get("partial", "")
+            if partial_text and partial_text != last_partial:
+                print(f"\rHearing: {command_text + ' ' + partial_text}", end='', flush=True)
+                last_partial = partial_text
+
+    print("\n")  # Add a newline after we're done listening
     return command_text.strip()
 
 # Global conversation history

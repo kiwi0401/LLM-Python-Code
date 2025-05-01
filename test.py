@@ -158,8 +158,8 @@ def listen_for_command(recognizer, audio_queue, tts_engine):
             _ = eval(recognizer.PartialResult()).get("partial", "")
     return command_text.strip()
 
-
 conversation_history = []
+
 def process_command(command_text, openai_client, prompt_path="dog_response.md", memory_limit=10):
     """Send the command to the OpenAI API and retrieve the response using conversation history.
 

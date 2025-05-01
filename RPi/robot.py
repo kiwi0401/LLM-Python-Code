@@ -268,7 +268,7 @@ def run_bot():
                         })
                         
                         # Only speak the response on the first iteration
-                        if tool_iteration == 1:
+                        if tool_iteration == 1 or tool_iteration == 2:
                             tts_engine.say(message.content)
                             tts_engine.runAndWait()
                         

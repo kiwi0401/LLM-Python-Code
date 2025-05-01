@@ -306,6 +306,17 @@ def change_posture(posture):
     else:
         return "Unknown posture"
 
+def eye_spy(action, user_guess=None):
+    """
+    Interface for the eye spy game using tools.eye_spy
+    """
+    try:
+        from tools import eye_spy as tools_eye_spy
+        return tools_eye_spy(action, user_guess)
+    except Exception as e:
+        logger.error(f"Error in eye spy game: {e}")
+        return "Sorry, I encountered an error while playing eye spy."
+
 def lightCtrl(colorName, cmdInput):
     if not serial_manager:
         return False

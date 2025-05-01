@@ -10,6 +10,7 @@ import datetime
 import logging
 import atexit
 from dotenv import load_dotenv
+import random
 
 # Configure logging
 logging.basicConfig(
@@ -24,6 +25,9 @@ logger = logging.getLogger("tools")
 
 # Load environment variables
 load_dotenv()
+
+# initialize eye_spy_game
+_current_eye_spy_object = None
 
 # Import robot control functions first - these are essential
 from robot_commands import change_posture, forward, backward, left
@@ -571,12 +575,81 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
             "error": str(e)
         }
 
+# Add at the top with other imports
+import random
+
+# Add this variable at the top level
+_current_eye_spy_object = None
+
+def eye_spy(action, user_guess=None):
+    """
+    Play a game of eye spy using the robot's camera.
+    
+    Parameters:
+    - action: str, either 'start' or 'check_guess'
+    - user_guess: str, the user's guess (only needed for check_guess)
+    
+    Returns:
+    - str: Description of chosen object or guess result
+    """
+    global _current_eye_spy_object
+    
+    if action == "start":
+        # Get the environment description
+        surroundings = view_surroundings()
+        
+        # Parse the environment description to get objects
+        objects = []
+        for line in surroundings.split('\n'):
+            if line.startswith("- Object Identification:"):
+                obj_name = line.split(":")[1].strip()
+                objects.append(obj_name)
+        
+        if not objects:
+            return "I can't see any objects to play with!"
+        
+        # Choose a random object
+        _current_eye_spy_object = random.choice(objects)
+
+        print(f"Current eye spy object: {_current_eye_spy_object}")
+        
+        # Find the object's description
+        object_description = ""
+        current_object = ""
+        for line in surroundings.split('\n'):
+            if line.startswith("- Object Identification:"):
+                current_object = line.split(":")[1].strip()
+            elif line.startswith("  Descriptive Details:") and current_object == _current_eye_spy_object:
+                object_description = line.split(":")[1].strip()
+                break
+        
+        # Create a playful description without revealing the object name
+        description = object_description.replace(_current_eye_spy_object.lower(), "something")
+        return f"I spy with my little eye... {description}"
+    
+    elif action == "check_guess":
+        if _current_eye_spy_object is None:
+            return "We haven't started a game yet! Say 'let's play eye spy' to start."
+        
+        if not user_guess:
+            return "Please make a guess!"
+        
+        # Check if the guess is correct (case-insensitive)
+        if user_guess.lower() in _current_eye_spy_object.lower():
+            _current_eye_spy_object = None  # Reset for next game
+            return f"Correct! It was a {user_guess}!"
+        else:
+            return "Not quite! Try again or say 'give up'"
+    
+    return "Invalid action. Use 'start' to begin a new game or 'check_guess' to check your guess."
+
 # Update available tools dictionary to include rotation and movement tools
 available_tools = {
     "view_surroundings": view_surroundings,
     "rotate_to_angle": rotate_to_angle,
     "move_distance": move_distance,
-    "change_posture": change_posture
+    "change_posture": change_posture,
+    "eye_spy": eye_spy
 }
 
 # Get tool descriptions from JSON file instead of defining them inline
