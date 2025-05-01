@@ -643,13 +643,22 @@ def eye_spy(action, user_guess=None):
     
     return "Invalid action. Use 'start' to begin a new game or 'check_guess' to check your guess."
 
+# trivia game
+def robot_trivia(user_answer, correct_answer):
+    """Compares the user's answer to the correct answer (case-insensitive, stripped)."""
+    if user_answer.strip().lower() == correct_answer.strip().lower():
+        return "Correct! Well done."
+    else:
+        return f"Incorrect. The correct answer was: {correct_answer}."
+
 # Update available tools dictionary to include rotation and movement tools
 available_tools = {
     "view_surroundings": view_surroundings,
     "rotate_to_angle": rotate_to_angle,
     "move_distance": move_distance,
     "change_posture": change_posture,
-    "eye_spy": eye_spy
+    "eye_spy": eye_spy,
+    "robot_trivia": robot_trivia
 }
 
 # Get tool descriptions from JSON file instead of defining them inline

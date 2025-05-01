@@ -317,6 +317,18 @@ def eye_spy(action, user_guess=None):
         logger.error(f"Error in eye spy game: {e}")
         return "Sorry, I encountered an error while playing eye spy."
 
+def robot_trivia(user_answer, correct_answer):
+    """
+    Interface for the trivia game using tools.robot_trivia
+    """
+    try:
+        from tools import robot_trivia as tools_robot_trivia
+        return tools_robot_trivia(user_answer, correct_answer)
+    except Exception as e:
+        logger.error(f"Error in trivia game: {e}")
+        return "Sorry, I encountered an error while playing trivia."
+
+
 def lightCtrl(colorName, cmdInput):
     if not serial_manager:
         return False

@@ -84,6 +84,27 @@
           "required": ["action"]
         }
       }
+    },
+    {
+      "type": "function",
+      "function": {
+        "name": "robot_trivia",
+        "description": "The robot asks trivia questions related to technology and checks the user's answers.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "user_answer": {
+              "type": "string",
+              "description": "The user's answer to the trivia question."
+            },
+            "correct_answer": {
+              "type": "string",
+              "description": "The correct answer to the trivia question, as determined by the LLM."
+            }
+          },
+          "required": ["user_answer", "correct_answer"]
+        }
+      }
     }
   ]
 }
