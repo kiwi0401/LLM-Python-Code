@@ -63,6 +63,34 @@ class SerialManager:
         logger.error(f"Failed to connect to serial port after {max_attempts} attempts")
         return False
     
+    def reconnect(self):
+        """Reconnect to the serial port"""
+        logger.info("Attempting to reconnect to serial port")
+        try:
+            # Close existing connection if it exists
+            if self.serial:
+                try:
+                    self.serial.close()
+                    logger.debug("Closed existing serial connection")
+                except Exception as e:
+                    logger.warning(f"Error closing existing serial connection: {e}")
+            
+            # Create a new connection
+            self.serial = serial.Serial(
+                self.port, 
+                self.baudrate,
+                timeout=self.timeout,
+                write_timeout=self.timeout,
+            )
+            time.sleep(1.5)  # Reduced stabilization time for command execution context
+            self.connected = True
+            logger.info("Serial connection reestablished successfully")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to reconnect to serial port: {e}")
+            self.connected = False
+            return False
+    
     def start_worker(self):
         """Start the worker thread to process commands"""
         self.running = True
@@ -109,9 +137,18 @@ class SerialManager:
     
     def _execute_command(self, cmd_type, command, retry_count=None):
         """Execute a serial command with maximum speed retries until timeout"""
+        # Attempt reconnection before executing the command
         if not self.connected or not self.serial:
-            logger.error("Cannot execute command: Not connected to serial port")
-            return {'success': False, 'error': 'Not connected to serial port'}
+            logger.warning("Not connected to serial port, attempting to reconnect")
+            if not self.reconnect():
+                return {'success': False, 'error': 'Not connected to serial port and reconnection failed'}
+        
+        # Attempt a reconnection anyway to refresh the connection
+        try:
+            self.reconnect()
+        except Exception as e:
+            logger.warning(f"Preventive reconnection attempt failed: {e}")
+            # Continue anyway with existing connection
         
         # Flush any lingering data before sending new command
         with self.lock:
@@ -195,6 +232,13 @@ class SerialManager:
                 if attempt % 20 == 0:
                     logger.debug(f"Command still waiting for response after {attempt} rapid attempts, time elapsed: {time.time() - start_time:.2f}s")
                 
+            except serial.SerialException as se:
+                logger.error(f"Serial exception (attempt {attempt}): {se}")
+                # Try to reconnect on serial exception
+                if self.reconnect():
+                    logger.info("Successfully reconnected after serial exception")
+                    # No delay, continue immediately with next attempt
+                continue
             except Exception as e:
                 logger.error(f"Error executing command (attempt {attempt}): {e}")
                 # No delay after error, continue immediately
@@ -203,6 +247,10 @@ class SerialManager:
         elapsed = time.time() - start_time
         logger.error(f"Command failed after {attempt} rapid attempts ({elapsed:.2f}s elapsed): {command}")
         
+        # Last resort: try reconnecting one more time
+        if self.reconnect():
+            logger.info("Final reconnection successful, checking buffer")
+            
         # Last resort: check if there's anything in the buffer that might indicate success
         try:
             with self.lock:
@@ -379,10 +427,11 @@ class SerialManager:
     
     def test_serial_connection(self):
         """Test if serial connection is working properly"""
-        if not self.connected or not self.serial:
-            logger.error("Cannot test connection: Not connected to serial port")
+        # Try a reconnection first
+        if not self.reconnect():
+            logger.error("Cannot test connection: Reconnection to serial port failed")
             return False
-        
+            
         # Use the rapid retry approach for testing
         start_time = time.time()
         timeout = 3.0  # 3 second timeout for test
@@ -430,6 +479,11 @@ class SerialManager:
     
     def send_command_sync(self, cmd_type, command, retry_count=None, timeout=15):
         """Send a command and wait for the result (synchronous)"""
+        # Try to reconnect before sending the command
+        if not self.connected:
+            logger.warning("Not connected before sending command, attempting to reconnect")
+            self.reconnect()
+            
         result_container = {'result': None, 'event': threading.Event()}
         
         def callback(result):

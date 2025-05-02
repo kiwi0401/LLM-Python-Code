@@ -349,7 +349,7 @@ def move_distance(distance_cm, speed=70, timeout=30):
         
         # Stop movement with retries
         stop_success = False
-        for attempt in range(1, 4):
+        for attempt in range(1, 200):
             if distance_cm >= 0:
                 if robot.stopFB():
                     stop_success = True
@@ -360,6 +360,7 @@ def move_distance(distance_cm, speed=70, timeout=30):
                     stop_success = True
                     logger.info("Backward movement stopped")
                     break
+            time.sleep(0.05)
                 
             logger.warning(f"Stop command failed, retrying ({attempt}/3)")
             time.sleep(0.1)  # Short delay before retry
@@ -383,19 +384,20 @@ def move_distance(distance_cm, speed=70, timeout=30):
         logger.error(error_msg, exc_info=True)
         return error_msg
 
-def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
+def rotate_to_angle(target_angle, speed=100, timeout=20):
     """
     Rotate the robot to reach a specified angle using gyroscope feedback
     
     Parameters:
-    - target_angle: Target angle in degrees (positive = clockwise, negative = counter-clockwise)
-    - speed: Speed of rotation (default 60)
-    - tolerance: How close to target angle is considered success (default 2.0 degrees)
+    - target_angle: Target angle in degrees (negative = clockwise, positive = counter-clockwise)
+    - speed: Speed of rotation (default 100)
     - timeout: Maximum time to try rotating in seconds (default 20)
     
     Returns:
     - dict: Status information including success/failure and measurements
     """
+    target_angle = target_angle / 2
+
     if not robot_module_available:
         error_msg = "Robot module not available. Cannot execute rotation commands."
         logger.error(error_msg)
@@ -428,15 +430,16 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
         if gyro_data:
             break
         logger.warning(f"Failed to get initial gyro reading, retrying ({attempt}/3)")
-        time.sleep(0.2)
+        time.sleep(0.1)
     
     if not gyro_data:
         error_msg = "Could not initialize gyroscope after 3 attempts"
         logger.error(error_msg)
         return {"success": False, "error": error_msg}
     
-    start_angle = gyro_data['angle_z']
-    logger.info(f"Initial angle: {start_angle}°")
+    # Invert the gyro angle for correct direction processing
+    start_angle = -gyro_data['angle_z']
+    logger.info(f"Initial angle: {start_angle}° (inverted from {-start_angle}°)")
     
     start_time = time.time()
     last_print_time = start_time
@@ -444,25 +447,27 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
     
     try:
         while time.time() - start_time < timeout:
-            # Determine direction and send command
+            # Determine direction and send command - FIXED DIRECTION LOGIC
             rotation_success = False
             for attempt in range(1, 4):
-                if target_angle > 0:
-                    # Turn right (clockwise)
-                    if robot.right(speed):
-                        rotation_success = True
-                        if attempt > 1:
-                            logger.info(f"Rotation command sent successfully on attempt {attempt}")
-                        break
-                else:
-                    # Turn left (counter-clockwise)
+                if target_angle < 0:
+                    # Turn LEFT (counter-clockwise) for negative target angle
+                    # This was incorrectly set to right() before
                     if robot.left(speed):
                         rotation_success = True
                         if attempt > 1:
                             logger.info(f"Rotation command sent successfully on attempt {attempt}")
                         break
+                else:
+                    # Turn RIGHT (clockwise) for positive target angle
+                    # This was incorrectly set to left() before
+                    if robot.right(speed):
+                        rotation_success = True
+                        if attempt > 1:
+                            logger.info(f"Rotation command sent successfully on attempt {attempt}")
+                        break
                 logger.warning(f"Rotation command failed, retrying ({attempt}/3)")
-                time.sleep(0.1)  # Short delay before retry
+                time.sleep(0.05)  # Short delay before retry
             
             if not rotation_success:
                 error_msg = "Failed to send rotation command after 3 attempts"
@@ -470,7 +475,7 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
                 return {"success": False, "error": error_msg}
             
             # Wait a short time for rotation to have an effect
-            time.sleep(0.1)
+            time.sleep(0.05)
             
             # Get current gyroscope data with retries
             gyro_data = None
@@ -484,18 +489,20 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
                 logger.warning("Failed to get gyro data during rotation")
                 continue
                 
-            current_angle = gyro_data['angle_z']
+            # Invert the current angle for correct direction processing
+            current_angle = -gyro_data['angle_z']
             angle_change = current_angle - start_angle
             
             # Print debug info periodically
             if time.time() - last_print_time > print_interval:
-                debug_msg = f"Current: {current_angle:.2f}°, Change: {angle_change:.2f}°, Target: {target_angle}°"
+                debug_msg = f"Current: {current_angle:.2f}° (inverted), Change: {angle_change:.2f}°, Target: {target_angle}°"
                 logger.info(debug_msg)
                 print(debug_msg)
                 last_print_time = time.time()
             
-            # Check if we've reached the target angle
-            if abs(angle_change - target_angle) <= tolerance:
+            # UPDATED STOPPING CONDITION: Check if we've exceeded the target angle
+            if (target_angle >= 0 and angle_change >= target_angle) or \
+               (target_angle < 0 and angle_change <= target_angle):
                 # Stop rotation with retries
                 stop_success = False
                 for attempt in range(1, 4):
@@ -507,7 +514,7 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
                 if not stop_success:
                     logger.warning("Failed to send stop command after reaching target angle")
                 
-                logger.info(f"Target angle reached! Final angle: {current_angle}°")
+                logger.info(f"Target angle reached! Final angle: {current_angle}° (inverted)")
                 return {
                     "success": True, 
                     "target": target_angle,
@@ -522,11 +529,11 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
         # If we get here, we've timed out
         # Stop rotation with retries
         stop_success = False
-        for attempt in range(1, 4):
+        while True:
             if robot.stopLR():
                 stop_success = True
                 break
-            time.sleep(0.05)
+            time.sleep(0.02)
         
         if not stop_success:
             logger.warning("Failed to send stop command after timeout")
@@ -540,13 +547,14 @@ def rotate_to_angle(target_angle, speed=100, tolerance=2.0, timeout=20):
             time.sleep(0.05)
         
         if last_gyro:
-            current_angle = last_gyro['angle_z']
+            # Invert the final angle reading for consistent reporting
+            current_angle = -last_gyro['angle_z']
             angle_change = current_angle - start_angle
         else:
             current_angle = None
             angle_change = None
         
-        timeout_msg = f"Rotation timed out after {timeout}s. Final angle: {current_angle}°"
+        timeout_msg = f"Rotation timed out after {timeout}s. Final angle: {current_angle}° (inverted)"
         logger.warning(timeout_msg)
         return {
             "success": False,

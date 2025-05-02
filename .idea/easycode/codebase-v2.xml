@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="com.obiscr.chatgpt.settings.EasyCodeState">
+    <option name="projectFiles" value="$PROJECT_DIR$/RPi/app.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/base_camera.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/camera_opencv.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/haarcascade_frontalface_default.xml;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/info.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/README.md;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/robot.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/serialTest.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/setup.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/RPi/webServer.py;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/dog_actions.md;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/dog_eyes.md;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/dog_response.md;C:/Users/kiwi0/PycharmProjects/LLM-Python-Code/test.py" />
+  </component>
+</project>

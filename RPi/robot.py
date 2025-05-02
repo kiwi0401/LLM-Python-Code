@@ -199,6 +199,10 @@ def run_bot():
         print(f"❌ Error: Prompt file not found at {prompt_file_path}")
         return False
     
+    time.sleep(5)
+    tts_engine.say("Robot is starting up")
+    tts_engine.runAndWait()
+    
     try:
         print("Voice assistant is now listening for the wake phrase...")
         tts_engine.say("Robot is ready and listening")
@@ -250,15 +254,16 @@ def run_bot():
                         
                         # Make the tool calling request to OpenAI
                         completion = openai_client.chat.completions.create(
-                            model="gpt-4o",
+                            model="gpt-4-1106-preview",
                             messages=messages,
-                            tools=tools
+                            tools=tools,
+                            max_tokens=4096,
                         )
                         
                         # Process and display the response
                         message = completion.choices[0].message
                         print("\nLLM Response:")
-                        print(message.content)
+                        print(message)
                         
                         # Add assistant's response to the message history
                         messages.append({
@@ -268,9 +273,8 @@ def run_bot():
                         })
                         
                         # Only speak the response on the first iteration
-                        if tool_iteration == 1 or tool_iteration == 2:
-                            tts_engine.say(message.content)
-                            tts_engine.runAndWait()
+                        tts_engine.say(message.content)
+                        tts_engine.runAndWait()
                         
                         # Check if there are tool calls
                         if message.tool_calls:
@@ -344,13 +348,13 @@ def run_bot():
                 # Add clear feedback that we're ready for the next command
                 print("\n-----------------------------------------")
                 print("✓ Command cycle complete. Listening for wake word again...")
-                tts_engine.say("Ready for next command")
-                tts_engine.runAndWait()
+                # tts_engine.say("Ready for next command")
+                # tts_engine.runAndWait()
                 
                 # Periodically trim conversation history to prevent it from getting too long
-                if len(messages) > 10:  # Keep system message plus last 9 exchanges
+                if len(messages) > 100:  # Keep system message plus last 9 exchanges
                     system_message = messages[0]
-                    messages = [system_message] + messages[-9:]
+                    messages = [system_message] + messages[-99:]
                 
             except KeyboardInterrupt:
                 print("\nKeyboard interrupt received. Exiting...")
@@ -429,7 +433,7 @@ def run_bot_non_voice():
         try:
             # Make the tool calling request to OpenAI
             completion = client.chat.completions.create(
-                model="gpt-4o",  # Using gpt-4o as it supports tool calling
+                model="chatgpt-4o-latest",  # Using gpt-4o as it supports tool calling
                 messages=messages,
                 tools=tools
             )
@@ -560,10 +564,10 @@ if __name__ == '__main__':
                 
                 print("\n===== Testing Robot Movement =====")
                 
-                # Test sequence: forward 1 meter, rotate 45 degrees, rotate back -45 degrees
-                print("\n1. Moving forward 100 cm (1 meter)...")
-                result = move_distance(100)
-                print(f"Result: {result}")
+                # # Test sequence: forward 1 meter, rotate 45 degrees, rotate back -45 degrees
+                # print("\n1. Moving forward 100 cm (1 meter)...")
+                # result = move_distance(100)
+                # print(f"Result: {result}")
                 
                 # Wait between movements
                 print("Waiting 2 seconds...")
